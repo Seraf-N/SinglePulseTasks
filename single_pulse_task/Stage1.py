@@ -31,11 +31,11 @@ import sys
 try:
     datestr = sys.argv[1]#'20190626'
     timestr = sys.argv[2]#'191438'
-except: 
+except:
     #raise Exception(f'sys.argv has length {len(sys.argv)}. datestr and timestr for dataset not set')
     datestr = '20210728'
     timestr = ''
-    
+
 codedir = '/home/serafinnadeau/Scripts/Chime_Crab_GP/chime_crab_gp/'
 workdir = os.getcwd()
 
@@ -75,17 +75,17 @@ for file in files:
         fband += [fb]
         fname += [file]
         fpath += [banddir + file]
-        
-ftab = QTable([fname, fnum, fband, fpath], 
-              names = ['fname', 'fnumber', 'fband', 'fpath'], 
-              meta = {'samples_per_file': 50000, 
-                      'samples_per_frame': 625, 
-                      'frames_per_file': 80, 
-                      'binning': 100, 
-                      's_per_sample': 2.56e-6, 
+
+ftab = QTable([fname, fnum, fband, fpath],
+              names = ['fname', 'fnumber', 'fband', 'fpath'],
+              meta = {'samples_per_file': 50000,
+                      'samples_per_frame': 625,
+                      'frames_per_file': 80,
+                      'binning': 100,
+                      's_per_sample': 2.56e-6,
                       'nchan': 1024,
                       'npol': 2,
-                      'pol_type': 'complex', 
+                      'pol_type': 'complex',
                       'file_path': banddir})
 
 ftab.sort(['fnumber', 'fband'])
@@ -117,12 +117,12 @@ for i in range(Nband):
     files = ftab[mask]['fpath']
     data += [vdif.open(files[startskip:-endskip], 'rs', sample_rate=1/(ftab.meta['s_per_sample']*u.s), verify=False)]
     bands += [Square(data[-1])]
-    
+
 ftab.remove_column('fpath')
 
 ftab.meta['start_time'] = data[0].start_time.isot
 ftab.meta['stop_time'] = data[0].stop_time.isot
-    
+
 ###########################################################################
 # Set up memmap for saving binned intensity stream
 ###########################################################################
@@ -141,7 +141,7 @@ samples_per_file = ftab.meta['samples_per_frame'] * ftab.meta['frames_per_file']
 i_samples = int(filecount * samples_per_file / binning)
 i_shape = (i_samples, Nchan)
 
-i_stream = open_memmap(istream + 'i_stream.npy', dtype=np.float16, 
+i_stream = open_memmap(istream + 'i_stream.npy', dtype=np.float16,
                        mode='w+', shape=i_shape)
 
 print(f'Intensity stream memmap initialized')
@@ -155,18 +155,18 @@ print(time.time() - t0, ' s')
 ##########################################################################
 
 def get_fileskip(filecount, samples_per_file):
-    
+
     skips = []
-    
+
     maxskip = int(500000 / samples_per_file)
     if maxskip <= 1:
         maxskip = 1
-    
+
     for fskip in range(1, maxskip+1):
         if (fskip * samples_per_file) % 100 == 0:
             if filecount % fskip == 0:
                 skips += [fskip]
-                
+
     return int(np.max(skips))
 
 fileskip = get_fileskip(filecount, samples_per_file)
@@ -177,7 +177,7 @@ ftab.meta['fileskip'] = fileskip
 # Loop through frames of data and split into channels
 # +
 # Save intensity stream
-##########################################################################
+################################################################
 
 t0 = time.time()
 
@@ -189,46 +189,46 @@ stepcount = 0
 
 for band in bands:
     band.seek(0)
-    
+
 for _ in range(int(filecount/fileskip)):
-    
+
     subframe = np.zeros((Nread, Nchan, Npol), dtype=bands[0].dtype)
-    
+
     for i in range(Nband):
-        
+
         subframe[:, bw*i:bw*(i+1), :] = bands[i].read(Nread).reshape(-1, bw, Npol)
-    
+
     subframe = np.sum(subframe, axis=2)
     subframe, _, _, _ = imbin(subframe, binning_r=binning)
-    
+
     i_stream[i_start:i_end] = subframe
     i_start = i_end
     i_end = i_start + int(Nread / 100)
-    
+
     del subframe
-    
+
     t = time.time() - t0
     hh = int(t / 3600)
     mm = int((t % 3600)/60)
     ss = int(t % 60)
-    
+
     stepcount += fileskip
     print(f'Read to file {stepcount}/{filecount}: {stepcount*100/(filecount):.2f}% complete; Time elapsed = {hh:02d}:{mm:02d}:{ss:02d}', end='               \r')
-    
+
 ##########################################################################
 # Close data streams
 ##########################################################################
-    
+
 for i in range(Nband):
     bands[i].close()
     data[i].close()
-    
+
 print('vdif data closed')
-    
+
 ##########################################################################
 # Write info table
 ##########################################################################
-    
+
 ftab.write(istream + 'SplitTab.hdf5', path='vdif_info', overwrite=True)
 
 print('info table written')
